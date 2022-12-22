@@ -1,11 +1,13 @@
 const logger = require("../logging/defaultLogger");
+const httpStatusCodes = require("../utils/httpStatusCodes");
 
 const errorHandler = (err, req, res, next) => {
-  console.log("NEKIII");
   logger.error(err);
 
-  const statusCode = res.statusCode ? res.statusCode : 500;
-  res.status(statusCode);
+  const statusCode = res.statusCode
+    ? res.statusCode
+    : httpStatusCodes.SERVER_ERROR;
+
   return res.status(statusCode).json({
     message: err.message,
   });

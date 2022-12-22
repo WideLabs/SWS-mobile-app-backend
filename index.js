@@ -4,17 +4,17 @@ const logger = require("./logging/defaultLogger");
 const errorHandler = require("./middleware/errorMiddleware");
 const processenv = require("./processConfig");
 
-const usersRoutes = require("./routes/usersRouters");
-const workordersRoutes = require("./routes/workordersRoutes");
+const usersRoutes = require("./routes/usersRoutes");
+const eventsRoutes = require("./routes/eventsRoutes");
 
-const PORT = processenv.PORT || 3000;
+const PORT = processenv.PORT || 5000;
 
 const app = express();
 
 app.use(bodyParser.json());
 
 app.use("/users", usersRoutes);
-app.use("/workorders", workordersRoutes);
+app.use("/events", eventsRoutes);
 
 app.use(errorHandler);
 
