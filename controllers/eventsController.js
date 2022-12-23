@@ -37,9 +37,9 @@ const getEventsByQueryParams = (req, res, next) => {
   const { id_work_order, id_column_order, id_takt } = req.query;
   // Check if atleast on query param is provided
   if (!id_work_order && !id_column_order && !id_takt)
-    return res
-      .status(httpStatusCodes.BAD_REQUEST)
-      .json({ message: "Missing query parameters." });
+    return res.status(httpStatusCodes.BAD_REQUEST).json({
+      message: "Missing query parameters. Atleast one param must be provided.",
+    });
 
   const params = { id_work_order, id_column_order, id_takt };
   // Filter out undefined (not provided) params
@@ -72,9 +72,9 @@ const getMostRecentEventByQueryParams = (req, res, next) => {
   const { id_work_order, id_column_order, id_takt } = req.query;
   // Check if atleast on query param is provided
   if (!id_work_order && !id_column_order && !id_takt)
-    return res
-      .status(httpStatusCodes.BAD_REQUEST)
-      .json({ message: "Missing query parameters." });
+    return res.status(httpStatusCodes.BAD_REQUEST).json({
+      message: "Missing query parameters. Atleast one param must be provided.",
+    });
 
   const params = { id_work_order, id_column_order, id_takt };
   // Filter out undefined (not provided) params
@@ -101,6 +101,73 @@ const getMostRecentEventByQueryParams = (req, res, next) => {
   });
 };
 
+// Route GET /events/all/time
+// Desc Calc elapsed time of results
+const getElapsedTimeOfEventsWithQueryParams = (req, res, next) => {
+  const { id_work_order, id_column_order, id_takt } = req.query;
+  if (!id_work_order || !id_column_order || !id_takt)
+    return res
+      .status(httpStatusCodes.BAD_REQUEST)
+      .json({ message: "Missing query parameters. All params required." });
+
+  const params = { id_work_order, id_column_order, id_takt };
+  // Filter out undefined (not provided) params
+  let paramsQueryStrings = [];
+  let paramsQueryValues = [];
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined) {
+      paramsQueryStrings.push(key + " = ?");
+      paramsQueryValues.push(value);
+    }
+  }
+  const query = `SELECT * FROM timed_event WHERE ${paramsQueryStrings.join(
+    " AND "
+  )};`;
+  db.query(query, paramsQueryValues, (error, results) => {
+    if (error) return next(error);
+    if (results.length < 2) {
+      return res
+        .status(httpStatusCodes.NOT_FOUND)
+        .json({ message: "Not enough results." });
+    }
+
+    let totalElapsedTime = {
+      hours: 0,
+      minutes: 0,
+      seconds: 0,
+    };
+
+    for (let i = 0; i < results.length - 1; i++) {
+      const element1 = results[i];
+      if (element1.action.toLowerCase() === "finish") break;
+      if (element1.action.toLowerCase() === "pause") continue;
+      const element2 = results[i + 1];
+      const elapsedTime = moment.duration(
+        moment(element2.time, "YYYY-MM-DD HH:mm:ss").diff(
+          moment(element1.time, "YYYY-MM-DD HH:mm:ss")
+        )
+      );
+      totalElapsedTime.hours += elapsedTime.hours();
+      totalElapsedTime.minutes += elapsedTime.minutes();
+      totalElapsedTime.seconds += elapsedTime.seconds();
+    }
+
+    const totalElapsedTimeStr = [
+      totalElapsedTime.hours,
+      totalElapsedTime.minutes,
+      totalElapsedTime.seconds,
+    ]
+      .map((val) => {
+        return val < 10 ? "0".concat(val.toString()) : val.toString();
+      })
+      .join(":");
+
+    return res
+      .status(httpStatusCodes.OK)
+      .json({ results, totalElapsedTime, totalElapsedTimeStr });
+  });
+};
+
 // Route GET /events/status
 // Desc Returns the status specified with query params (all params must be provided)
 // Params id_column_order, id_takt
@@ -110,7 +177,7 @@ const getStatusOfTaskByQueryParams = (req, res, next) => {
   if (!id_column_order || !id_takt)
     return res
       .status(httpStatusCodes.BAD_REQUEST)
-      .json({ message: "Missing query parameters." });
+      .json({ message: "Missing query parameters. All params required." });
 
   const statusMap = {
     start: "inProgress",
@@ -241,7 +308,6 @@ const addEvent = (req, res, next) => {
               }
             );
           } else {
-            // TODO CALC AND RETURN ELAPSED TIME
             // Add new event as FINISH
             const time = moment(Date.now()).format("YYYY-MM-DD HH:mm:ss");
             db.query(
@@ -257,11 +323,62 @@ const addEvent = (req, res, next) => {
               ],
               (error, results) => {
                 if (error) return next(error);
-                return res.status(httpStatusCodes.OK).json({
-                  message: "New event added successfuly.",
-                  action: "FINISH",
-                  at: time,
-                });
+
+                // Get all events with same id_column_order and id_takt
+                db.query(
+                  "SELECT * FROM timed_event WHERE id_column_order = ? AND id_takt = ?",
+                  [id_column_order, id_takt],
+                  (error, results) => {
+                    if (error) return next(error);
+                    // Safeguard but with proper use this should never happen
+                    if (results.length < 2) {
+                      return next(
+                        new Error(
+                          "Elapsed time calculation failed. Unexpected server error."
+                        )
+                      );
+                    }
+                    let totalElapsedTime = {
+                      hours: 0,
+                      minutes: 0,
+                      seconds: 0,
+                    };
+
+                    for (let i = 0; i < results.length - 1; i++) {
+                      const element1 = results[i];
+                      if (element1.action.toLowerCase() !== "start") continue;
+                      const element2 = results[i + 1];
+                      const elapsedTime = moment.duration(
+                        moment(element2.time, "YYYY-MM-DD HH:mm:ss").diff(
+                          moment(element1.time, "YYYY-MM-DD HH:mm:ss")
+                        )
+                      );
+                      totalElapsedTime.hours += elapsedTime.hours();
+                      totalElapsedTime.minutes += elapsedTime.minutes();
+                      totalElapsedTime.seconds += elapsedTime.seconds();
+                    }
+
+                    const totalElapsedTimeStr = [
+                      totalElapsedTime.hours,
+                      totalElapsedTime.minutes,
+                      totalElapsedTime.seconds,
+                    ]
+                      .map((val) => {
+                        return val < 10
+                          ? "0".concat(val.toString())
+                          : val.toString();
+                      })
+                      .join(":");
+
+                    return res.status(httpStatusCodes.OK).json({
+                      message: "New event added successfuly.",
+                      action: "FINISH",
+                      at: time,
+                      totalElapsedTime,
+                      totalElapsedTimeStr,
+                    });
+                  }
+                );
               }
             );
           }
@@ -321,4 +438,5 @@ module.exports = {
   getMostRecentEventByQueryParams,
   getStatusOfTaskByQueryParams,
   addEvent,
+  getElapsedTimeOfEventsWithQueryParams,
 };
