@@ -1,434 +1,328 @@
 const moment = require("moment");
-const db = require("../db");
+const eventsDbService = require("../db/services/eventsService");
 const httpStatusCodes = require("../utils/httpStatusCodes");
+const eventsStatusMap = require("../utils/eventsStatusMap");
+const { calcElapsedTimeBetweenEvents } = require("../utils/dateAndTimeUtils");
 
 // Route GET /events
 // Desc Returns all event in db
-const getEvents = (req, res, next) => {
-  db.query("SELECT * FROM timed_event", (error, results) => {
-    if (error) return next(error);
-    return res.status(httpStatusCodes.OK).json(results);
-  });
+const getEvents = async (req, res, next) => {
+  try {
+    const results = await eventsDbService.getAllEvents();
+    return res.status(200).json(results);
+  } catch (error) {
+    next(error);
+  }
 };
 
 // Route GET /events/:id
 // Desc Return event with specified id
-const getEventById = (req, res, next) => {
-  const { id } = req.params;
-  db.query(
-    "SELECT * FROM timed_event WHERE id_timed_event = ?;",
-    [id],
-    (error, results) => {
-      if (error) return next(error);
-      if (results.length < 1)
-        return res
-          .status(httpStatusCodes.NOT_FOUND)
-          .json({ message: `Timed_event not found by id: {${id}}` });
+const getEventById = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const results = await eventsDbService.getEventById(id);
 
-      return res.status(httpStatusCodes.OK).json(results);
+    if (results.length < 1) {
+      return res
+        .status(httpStatusCodes.NOT_FOUND)
+        .json({ message: `Event not found by id: {${id}}.` });
     }
-  );
+
+    return res.status(httpStatusCodes.OK).json(results);
+  } catch (error) {}
 };
 
-// Route GET /events/all
+// Route GET /events/query/all
 // Desc Returns all event specified with query params (atleast one param must be provided)
 // Params id_work_order, id_column_order, id_takt
-const getEventsByQueryParams = (req, res, next) => {
-  const { id_work_order, id_column_order, id_takt } = req.query;
-  // Check if atleast on query param is provided
-  if (!id_work_order && !id_column_order && !id_takt)
-    return res.status(httpStatusCodes.BAD_REQUEST).json({
-      message: "Missing query parameters. Atleast one param must be provided.",
+const getEventsByQueryParams = async (req, res, next) => {
+  try {
+    const { id_work_order, id_column_order, id_takt } = req.query;
+
+    // Check if atleast on query param is provided
+    if (!id_work_order && !id_column_order && !id_takt) {
+      return res.status(httpStatusCodes.BAD_REQUEST).json({
+        message:
+          "Missing query parameters. Atleast one param must be provided.",
+      });
+    }
+
+    let results = await eventsDbService.getAllEventsWithParams({
+      id_work_order,
+      id_column_order,
+      id_takt,
     });
 
-  const params = { id_work_order, id_column_order, id_takt };
-  // Filter out undefined (not provided) params
-  let paramsQueryStrings = [];
-  let paramsQueryValues = [];
-  for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined) {
-      paramsQueryStrings.push(key + " = ?");
-      paramsQueryValues.push(value);
-    }
-  }
-  const query = `SELECT * FROM timed_event WHERE ${paramsQueryStrings.join(
-    " AND "
-  )};`;
-  db.query(query, paramsQueryValues, (error, results) => {
-    if (error) return next(error);
+    // Format times
+    // TODO sth with the time formats?
     if (results.length > 0) {
       results = results.map(({ time, ...rest }) => {
         return { ...rest, time: moment(time).format("YYYY-MM-DD HH:mm:ss") };
       });
     }
+
+    // If no results return empty array.
     return res.status(httpStatusCodes.OK).json(results);
-  });
+  } catch (error) {
+    next(error);
+  }
 };
 
-// Route GET /events/recent
+// Route GET /events/query/recent
 // Desc Returns the most recent event specified with query params (atleast one param must be provided)
 // Params id_work_order, id_column_order, id_takt
-const getMostRecentEventByQueryParams = (req, res, next) => {
-  const { id_work_order, id_column_order, id_takt } = req.query;
-  // Check if atleast on query param is provided
-  if (!id_work_order && !id_column_order && !id_takt)
-    return res.status(httpStatusCodes.BAD_REQUEST).json({
-      message: "Missing query parameters. Atleast one param must be provided.",
+const getMostRecentEventByQueryParams = async (req, res, next) => {
+  try {
+    const { id_work_order, id_column_order, id_takt } = req.query;
+
+    // Check if atleast on query param is provided
+    if (!id_work_order && !id_column_order && !id_takt)
+      return res.status(httpStatusCodes.BAD_REQUEST).json({
+        message:
+          "Missing query parameters. Atleast one param must be provided.",
+      });
+
+    const result = await eventsDbService.getMostRecentEventWithParams({
+      id_work_order,
+      id_column_order,
+      id_takt,
     });
 
-  const params = { id_work_order, id_column_order, id_takt };
-  // Filter out undefined (not provided) params
-  let paramsQueryStrings = [];
-  let paramsQueryValues = [];
-  for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined) {
-      paramsQueryStrings.push(key + " = ?");
-      paramsQueryValues.push(value);
+    if (!result) {
+      return res
+        .status(httpStatusCodes.NOT_FOUND)
+        .json({ message: "No events found with specified query params." });
     }
+
+    const timeFormated = moment(result.time).format("YYYY-MM-DD HH:mm:ss");
+    result.time = timeFormated;
+
+    return res.status(httpStatusCodes.OK).json(result);
+  } catch (error) {
+    next(error);
   }
-  const query = `SELECT * FROM timed_event WHERE ${paramsQueryStrings.join(
-    " AND "
-  )} ORDER BY time DESC;`;
-  db.query(query, paramsQueryValues, (error, results) => {
-    if (error) return next(error);
-    if (results.length > 0) {
-      const timeFormated = moment(results[0].time).format(
-        "YYYY-MM-DD HH:mm:ss"
-      );
-      results[0].time = timeFormated;
-    }
-    return res.status(httpStatusCodes.OK).json(results[0]);
-  });
 };
 
-// Route GET /events/all/time
+// Route GET /events/query/all/time
 // Desc Calc elapsed time of results
-const getElapsedTimeOfEventsWithQueryParams = (req, res, next) => {
-  const { id_work_order, id_column_order, id_takt } = req.query;
-  if (!id_work_order || !id_column_order || !id_takt)
-    return res
-      .status(httpStatusCodes.BAD_REQUEST)
-      .json({ message: "Missing query parameters. All params required." });
+const getElapsedTimeOfEventsWithQueryParams = async (req, res, next) => {
+  try {
+    const { id_column_order, id_takt } = req.query;
 
-  const params = { id_work_order, id_column_order, id_takt };
-  // Filter out undefined (not provided) params
-  let paramsQueryStrings = [];
-  let paramsQueryValues = [];
-  for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined) {
-      paramsQueryStrings.push(key + " = ?");
-      paramsQueryValues.push(value);
+    if (!id_column_order || !id_takt) {
+      return res
+        .status(httpStatusCodes.BAD_REQUEST)
+        .json({ message: "Missing query parameters. Both params required" });
     }
-  }
-  const query = `SELECT * FROM timed_event WHERE ${paramsQueryStrings.join(
-    " AND "
-  )};`;
-  db.query(query, paramsQueryValues, (error, results) => {
-    if (error) return next(error);
+
+    const results = await eventsDbService.getAllEventsWithParams({
+      id_column_order,
+      id_takt,
+    });
+
     if (results.length < 2) {
       return res
         .status(httpStatusCodes.NOT_FOUND)
         .json({ message: "Not enough results." });
     }
 
-    let totalElapsedTime = {
-      hours: 0,
-      minutes: 0,
-      seconds: 0,
-    };
-
-    for (let i = 0; i < results.length - 1; i++) {
-      const element1 = results[i];
-      if (element1.action.toLowerCase() === "finish") break;
-      if (element1.action.toLowerCase() === "pause") continue;
-      const element2 = results[i + 1];
-      const elapsedTime = moment.duration(
-        moment(element2.time, "YYYY-MM-DD HH:mm:ss").diff(
-          moment(element1.time, "YYYY-MM-DD HH:mm:ss")
-        )
-      );
-      totalElapsedTime.hours += elapsedTime.hours();
-      totalElapsedTime.minutes += elapsedTime.minutes();
-      totalElapsedTime.seconds += elapsedTime.seconds();
-    }
-
-    const totalElapsedTimeStr = [
-      totalElapsedTime.hours,
-      totalElapsedTime.minutes,
-      totalElapsedTime.seconds,
-    ]
-      .map((val) => {
-        return val < 10 ? "0".concat(val.toString()) : val.toString();
-      })
-      .join(":");
-
-    return res
-      .status(httpStatusCodes.OK)
-      .json({ results, totalElapsedTime, totalElapsedTimeStr });
-  });
+    const total_elapsed_time = calcElapsedTimeBetweenEvents(results);
+    return res.status(httpStatusCodes.OK).json({
+      results,
+      total_elapsed_time,
+      total_elapsed_time_str: total_elapsed_time.toString(),
+    });
+  } catch (error) {
+    next(error);
+  }
 };
 
 // Route GET /events/status
 // Desc Returns the status specified with query params (all params must be provided)
 // Params id_column_order, id_takt
-const getStatusOfTaskByQueryParams = (req, res, next) => {
-  const { id_column_order, id_takt } = req.query;
-  // Check if atleast one query param is provided
-  if (!id_column_order || !id_takt)
-    return res
-      .status(httpStatusCodes.BAD_REQUEST)
-      .json({ message: "Missing query parameters. All params required." });
+const getStatusOfTaskByQueryParams = async (req, res, next) => {
+  try {
+    const { id_column_order, id_takt } = req.query;
 
-  const statusMap = {
-    start: "inProgress",
-    pause: "paused",
-    finish: "finished",
-  };
-
-  // TODO return also who is working on it?
-  db.query(
-    `SELECT action
-      FROM timed_event 
-      WHERE id_column_order = ? AND id_takt = ? 
-      ORDER BY time DESC;`,
-    [id_column_order, id_takt],
-    (error, results) => {
-      if (error) return next(error);
-      if (results.length < 1) {
-        return res.status(httpStatusCodes.OK).json({ status: "none" });
-      }
-
-      return res.status(httpStatusCodes.OK).json({
-        status: statusMap[results[0].action.toLowerCase()],
-      });
+    if (!id_column_order || !id_takt) {
+      return res
+        .status(httpStatusCodes.BAD_REQUEST)
+        .json({ message: "Missing query parameters. Both params required." });
     }
-  );
+
+    const result = await eventsDbService.getMostRecentEventWithParams({
+      id_column_order,
+      id_takt,
+    });
+
+    // No event for specified task found. Work hasnt started yet.
+    if (!result) {
+      return res
+        .status(httpStatusCodes.OK)
+        .json({ status: eventsStatusMap.mapActionToStatus("missing") });
+    }
+
+    return res.status(httpStatusCodes.OK).json({
+      status: eventsStatusMap.mapActionToStatus(result.action),
+    });
+  } catch (error) {
+    next(error);
+  }
 };
 
 // Route POST /events
 // Desc Adds new event based on values provided in request body
-const addEvent = (req, res, next) => {
-  const { id_work_order, id_column_order, id_takt, action, id_mobile_user } =
-    req.body;
+const addEvent = async (req, res, next) => {
+  try {
+    const { id_work_order, id_column_order, id_takt, action, id_mobile_user } =
+      req.body;
 
-  if (
-    !id_work_order ||
-    !id_column_order ||
-    !id_takt ||
-    !action ||
-    !id_mobile_user
-  ) {
-    return res
-      .status(httpStatusCodes.BAD_REQUEST)
-      .json({ message: "Bad request. Missing properties in body." });
-  }
-
-  if (!["start", "pause", "finish"].includes(action.toLowerCase())) {
-    return res
-      .status(httpStatusCodes.BAD_REQUEST)
-      .json({ message: "Bad request. Invalid action." });
-  }
-
-  // Retrieve last event added
-  db.query(
-    "SELECT * FROM timed_event WHERE id_column_order = ? AND id_takt = ? ORDER BY time DESC",
-    [id_column_order, id_takt],
-    (error, results) => {
-      if (error) return next(error);
-      // No previous event for task. Start new task.
-      if (results.length < 1) {
-        // Tried to pause/end task that hasnt started yet.
-        if (action.toLowerCase() !== "start") {
-          return res.status(httpStatusCodes.BAD_REQUEST).json({
-            message:
-              "Bad request. Can't pause/finish task that has not started yet.",
-          });
-        }
-        // Add new event as START
-        const time = moment(Date.now()).format("YYYY-MM-DD HH:mm:ss");
-        db.query(
-          `INSERT INTO timed_event (id_work_order, id_column_order, id_takt, id_mobile_user, action, time) 
-          VALUES (?, ?, ?, ?, ?, ?);`,
-          [
-            id_work_order,
-            id_column_order,
-            id_takt,
-            id_mobile_user,
-            "START",
-            time,
-          ],
-          (error, results) => {
-            if (error) return next(error);
-            return res.status(httpStatusCodes.OK).json({
-              message: "New event added successfuly.",
-              action: "START",
-              at: time,
-            });
-          }
-        );
-      } else {
-        const lastEvent = results[0];
-
-        // Check if task has already finished. No further events allowed.
-        if (lastEvent.action.toLowerCase() === "finish") {
-          return res
-            .status(httpStatusCodes.BAD_REQUEST)
-            .json({ message: "Bad request. Task is already finished." });
-        }
-
-        // Check if last event was start
-        if (lastEvent.action.toLowerCase() === "start") {
-          // Prevent two consecutve start events
-          if (action.toLowerCase() === "start") {
-            return res.status(httpStatusCodes.BAD_REQUEST).json({
-              message: "Bad request. Action is same as previous on task.",
-            });
-          }
-          if (action.toLowerCase() === "pause") {
-            // Add new event as PAUSE
-            const time = moment(Date.now()).format("YYYY-MM-DD HH:mm:ss");
-            db.query(
-              `INSERT INTO timed_event (id_work_order, id_column_order, id_takt, id_mobile_user, action, time) 
-            VALUES (?, ?, ?, ?, ?, ?);`,
-              [
-                id_work_order,
-                id_column_order,
-                id_takt,
-                id_mobile_user,
-                "PAUSE",
-                time,
-              ],
-              (error, results) => {
-                if (error) return next(error);
-                return res.status(httpStatusCodes.OK).json({
-                  message: "New event added successfuly.",
-                  action: "PAUSE",
-                  at: time,
-                });
-              }
-            );
-          } else {
-            // Add new event as FINISH
-            const time = moment(Date.now()).format("YYYY-MM-DD HH:mm:ss");
-            db.query(
-              `INSERT INTO timed_event (id_work_order, id_column_order, id_takt, id_mobile_user, action, time) 
-            VALUES (?, ?, ?, ?, ?, ?);`,
-              [
-                id_work_order,
-                id_column_order,
-                id_takt,
-                id_mobile_user,
-                "FINISH",
-                time,
-              ],
-              (error, results) => {
-                if (error) return next(error);
-
-                // Get all events with same id_column_order and id_takt
-                db.query(
-                  "SELECT * FROM timed_event WHERE id_column_order = ? AND id_takt = ?",
-                  [id_column_order, id_takt],
-                  (error, results) => {
-                    if (error) return next(error);
-                    // Safeguard but with proper use this should never happen
-                    if (results.length < 2) {
-                      return next(
-                        new Error(
-                          "Elapsed time calculation failed. Unexpected server error."
-                        )
-                      );
-                    }
-                    let totalElapsedTime = {
-                      hours: 0,
-                      minutes: 0,
-                      seconds: 0,
-                    };
-
-                    for (let i = 0; i < results.length - 1; i++) {
-                      const element1 = results[i];
-                      if (element1.action.toLowerCase() !== "start") continue;
-                      const element2 = results[i + 1];
-                      const elapsedTime = moment.duration(
-                        moment(element2.time, "YYYY-MM-DD HH:mm:ss").diff(
-                          moment(element1.time, "YYYY-MM-DD HH:mm:ss")
-                        )
-                      );
-                      totalElapsedTime.hours += elapsedTime.hours();
-                      totalElapsedTime.minutes += elapsedTime.minutes();
-                      totalElapsedTime.seconds += elapsedTime.seconds();
-                    }
-
-                    const totalElapsedTimeStr = [
-                      totalElapsedTime.hours,
-                      totalElapsedTime.minutes,
-                      totalElapsedTime.seconds,
-                    ]
-                      .map((val) => {
-                        return val < 10
-                          ? "0".concat(val.toString())
-                          : val.toString();
-                      })
-                      .join(":");
-
-                    return res.status(httpStatusCodes.OK).json({
-                      message: "New event added successfuly.",
-                      action: "FINISH",
-                      at: time,
-                      totalElapsedTime,
-                      totalElapsedTimeStr,
-                    });
-                  }
-                );
-              }
-            );
-          }
-        }
-        // Only action that remains to be checked on last event is pause
-        // TODO can a task be ended from being paused?
-        else if (lastEvent.action.toLowerCase() === "pause") {
-          if (action.toLowerCase() === "pause") {
-            return res.status(httpStatusCodes.BAD_REQUEST).json({
-              message: "Bad request. Action is same as previous on task.",
-            });
-          }
-          if (action.toLowerCase() === "finish") {
-            return res.status(httpStatusCodes.BAD_REQUEST).json({
-              message: "Bad request. Can't finish task that is on pause.",
-            });
-          }
-          // Only possible action left is start
-          // Add new event as START
-          const time = moment(Date.now()).format("YYYY-MM-DD HH:mm:ss");
-          db.query(
-            `INSERT INTO timed_event (id_work_order, id_column_order, id_takt, id_mobile_user, action, time) 
-          VALUES (?, ?, ?, ?, ?, ?);`,
-            [
-              id_work_order,
-              id_column_order,
-              id_takt,
-              id_mobile_user,
-              "START",
-              time,
-            ],
-            (error, results) => {
-              if (error) return next(error);
-              return res.status(httpStatusCodes.OK).json({
-                message: "New event added successfuly.",
-                action: "START",
-                at: time,
-              });
-            }
-          );
-        } else {
-          // Safety meassure
-          // If all check are correct this should never happend.
-          return next(
-            new Error("Adding new event failed. Unexpected server error.")
-          );
-        }
-      }
+    if (
+      !id_work_order ||
+      !id_column_order ||
+      !id_takt ||
+      !action ||
+      !id_mobile_user
+    ) {
+      return res
+        .status(httpStatusCodes.BAD_REQUEST)
+        .json({ message: "Bad request. Missing properties in body." });
     }
-  );
+
+    if (!["start", "pause", "finish"].includes(action.toLowerCase())) {
+      return res
+        .status(httpStatusCodes.BAD_REQUEST)
+        .json({ message: "Bad request. Invalid action." });
+    }
+
+    const TIME_FORMATED = moment(Date.now()).format("YYYY-MM-DD HH:mm:ss");
+
+    const lastAddedEvent = await eventsDbService.getMostRecentEventWithParams({
+      id_column_order,
+      id_takt,
+    });
+
+    // No previous event for task. Start new task.
+    if (!lastAddedEvent) {
+      // Tried to pause/end task that hasnt started yet.
+      if (action.toLowerCase() !== "start") {
+        return res.status(httpStatusCodes.BAD_REQUEST).json({
+          message:
+            "Bad request. Can't pause/finish task that has not started yet.",
+        });
+      }
+      const newEventId = await eventsDbService.addNewEvent(
+        id_work_order,
+        id_column_order,
+        id_takt,
+        id_mobile_user,
+        TIME_FORMATED,
+        "START"
+      );
+      return res.status(httpStatusCodes.OK).json({
+        message: "New event added successfuly.",
+        action: "START",
+        at: TIME_FORMATED,
+        id_timed_event: newEventId,
+      });
+    } // TODO MAYBE ELSE {}
+
+    // If previous event was to finish task.
+    if (lastAddedEvent.action.toLowerCase() === "finish") {
+      return res
+        .status(httpStatusCodes.BAD_REQUEST)
+        .json({ message: "Bad request. Task is already finished." });
+    }
+
+    // If previous action was start, only next allowed actions are "PAUSE" and "FINISH"
+    if (lastAddedEvent.action.toLowerCase() === "start") {
+      // If current action is "start" return
+      if (action.toLowerCase() === "start") {
+        return res.status(httpStatusCodes.BAD_REQUEST).json({
+          message: "Bad request. Action is same as previous on task.",
+        });
+      }
+      // If current action is "pause" add new pause event.
+      if (action.toLowerCase() === "pause") {
+        const newEventId = await eventsDbService.addNewEvent(
+          id_work_order,
+          id_column_order,
+          id_takt,
+          id_mobile_user,
+          TIME_FORMATED,
+          "PAUSE"
+        );
+        return res.status(httpStatusCodes.OK).json({
+          message: "New event added successfuly.",
+          action: "PAUSE",
+          at: TIME_FORMATED,
+          id_timed_event: newEventId,
+        });
+      }
+      // If current action is "finish" add new finish event and calculate elapse time.
+      // TODO ELAPSED TIME CALC UTIL
+      const newEventId = await eventsDbService.addNewEvent(
+        id_work_order,
+        id_column_order,
+        id_takt,
+        id_mobile_user,
+        TIME_FORMATED,
+        "FINISH"
+      );
+      const correspondingEvents = await eventsDbService.getAllEventsWithParams({
+        id_column_order,
+        id_takt,
+      });
+      // Safeguard but with proper use this should never happen
+      if (correspondingEvents.length < 2) {
+        return next(
+          new Error("Elapsed time calculation failed. Unexpected server error.")
+        );
+      }
+
+      const total_elapsed_time = calcElapsedTimeBetweenEvents(results);
+      return res.status(httpStatusCodes.OK).json({
+        message: "New event added successfuly.",
+        action: "FINISH",
+        at: TIME_FORMATED,
+        id_timed_event: newEventId,
+        all_events: correspondingEvents,
+        total_elapsed_time,
+        total_elapsed_time_str: total_elapsed_time.toString(),
+      });
+    }
+    // Only action that remains to be checked on last event is pause
+    if (lastAddedEvent.action.toLowerCase() === "pause") {
+      // Can't pause an already paused event.
+      if (action.toLowerCase() === "pause") {
+        return res.status(httpStatusCodes.BAD_REQUEST).json({
+          message: "Bad request. Action is same as previous on task.",
+        });
+      }
+      // Can't finish an event currently on pause.
+      if (action.toLowerCase() === "finish") {
+        return res.status(httpStatusCodes.BAD_REQUEST).json({
+          message: "Bad request. Can't finish task that is on pause.",
+        });
+      }
+      const newEventId = await eventsDbService.addNewEvent(
+        id_work_order,
+        id_column_order,
+        id_takt,
+        id_mobile_user,
+        TIME_FORMATED,
+        "START"
+      );
+      return res.status(httpStatusCodes.OK).json({
+        message: "New event added successfuly.",
+        action: "START",
+        at: TIME_FORMATED,
+        id_timed_event: newEventId,
+      });
+    }
+  } catch (error) {
+    next(error);
+  }
 };
 
 module.exports = {
@@ -436,7 +330,7 @@ module.exports = {
   getEventById,
   getEventsByQueryParams,
   getMostRecentEventByQueryParams,
+  getElapsedTimeOfEventsWithQueryParams,
   getStatusOfTaskByQueryParams,
   addEvent,
-  getElapsedTimeOfEventsWithQueryParams,
 };
