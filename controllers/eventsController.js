@@ -280,7 +280,8 @@ const addEvent = async (req, res, next) => {
         );
       }
 
-      const total_elapsed_time = calcElapsedTimeBetweenEvents(results);
+      const total_elapsed_time =
+        calcElapsedTimeBetweenEvents(correspondingEvents);
       return res.status(httpStatusCodes.OK).json({
         message: "New event added successfuly.",
         action: "FINISH",

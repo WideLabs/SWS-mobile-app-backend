@@ -7,7 +7,15 @@ const elapsedTimeObject = {
   add(h, m, s) {
     this.hours += h;
     this.minutes += m;
+    if (this.minutes > 60) {
+      this.hours += 1;
+      this.minutes -= 60;
+    }
     this.seconds += s;
+    if (this.seconds > 60) {
+      this.minutes += 1;
+      this.seconds -= 60;
+    }
   },
   toString() {
     return [this.hours, this.minutes, this.seconds]

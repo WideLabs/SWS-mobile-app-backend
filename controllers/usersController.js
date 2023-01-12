@@ -1,4 +1,3 @@
-//const db = require("../db");
 const httpStatusCodes = require("../utils/httpStatusCodes");
 const usersDbService = require("../db/services/usersService");
 
