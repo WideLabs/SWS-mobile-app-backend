@@ -1,5 +1,6 @@
 const moment = require("moment");
 const eventsDbService = require("../db/services/eventsService");
+const usersDbService = require("../db/services/usersService");
 const httpStatusCodes = require("../utils/httpStatusCodes");
 const eventsStatusMap = require("../utils/eventsStatusMap");
 const { calcElapsedTimeBetweenEvents } = require("../utils/dateAndTimeUtils");
@@ -155,6 +156,8 @@ const getStatusOfTaskByQueryParams = async (req, res, next) => {
       id_takt,
     });
 
+    const user = await usersDbService.getUserById(result.id_mobile_user);
+
     // No event for specified task found. Work hasnt started yet.
     if (!result) {
       return res
@@ -164,6 +167,11 @@ const getStatusOfTaskByQueryParams = async (req, res, next) => {
 
     return res.status(httpStatusCodes.OK).json({
       status: eventsStatusMap.mapActionToStatus(result.action),
+      user: {
+        id_user: result.id_mobile_user,
+        username: user.username,
+        name: user.name,
+      },
     });
   } catch (error) {
     next(error);
@@ -202,6 +210,10 @@ const addEvent = async (req, res, next) => {
       id_takt,
     });
 
+    console.log("last event id", lastAddedEvent?.id_timed_event);
+    console.log("last event action", lastAddedEvent?.action);
+    console.log("last event time", lastAddedEvent?.time);
+
     // No previous event for task. Start new task.
     if (!lastAddedEvent) {
       // Tried to pause/end task that hasnt started yet.
@@ -224,6 +236,7 @@ const addEvent = async (req, res, next) => {
         action: "START",
         at: TIME_FORMATED,
         id_timed_event: newEventId,
+        new_start: true,
       });
     } // TODO MAYBE ELSE {}
 
@@ -319,6 +332,7 @@ const addEvent = async (req, res, next) => {
         action: "START",
         at: TIME_FORMATED,
         id_timed_event: newEventId,
+        new_start: false,
       });
     }
   } catch (error) {

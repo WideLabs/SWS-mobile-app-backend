@@ -49,7 +49,7 @@ exports.getMostRecentEventWithParams = async (params) => {
 
   const query = `SELECT * FROM timed_event WHERE ${paramsQueryStrings.join(
     " AND "
-  )} ORDER BY time DESC;`;
+  )} ORDER BY id_timed_event DESC;`;
 
   const [rows, fields] = await connection
     .promise()

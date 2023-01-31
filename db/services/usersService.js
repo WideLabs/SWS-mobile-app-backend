@@ -15,7 +15,7 @@ exports.getUserById = async (id) => {
     .query("SELECT username, name FROM mobile_user WHERE id_mobile_user = ?;", [
       id,
     ]);
-  return rows;
+  return rows[0];
 };
 
 exports.getUserByUsername = async (username) => {
