@@ -156,14 +156,13 @@ const getStatusOfTaskByQueryParams = async (req, res, next) => {
       id_takt,
     });
 
-    const user = await usersDbService.getUserById(result.id_mobile_user);
-
     // No event for specified task found. Work hasnt started yet.
     if (!result) {
       return res
         .status(httpStatusCodes.OK)
         .json({ status: eventsStatusMap.mapActionToStatus("missing") });
     }
+    const user = await usersDbService.getUserById(result.id_mobile_user);
 
     return res.status(httpStatusCodes.OK).json({
       status: eventsStatusMap.mapActionToStatus(result.action),
