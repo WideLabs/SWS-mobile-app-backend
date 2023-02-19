@@ -6,6 +6,7 @@ const processenv = require("./processConfig");
 
 const usersRoutes = require("./routes/usersRoutes");
 const eventsRoutes = require("./routes/eventsRoutes");
+const ordersRoutes = require("./routes/ordersRoutes");
 
 const PORT = processenv.PORT || 5000;
 
@@ -15,6 +16,7 @@ app.use(bodyParser.json());
 
 app.use("/users", usersRoutes);
 app.use("/events", eventsRoutes);
+app.use("/orders", ordersRoutes);
 
 app.use(errorHandler);
 

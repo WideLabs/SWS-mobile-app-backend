@@ -16,6 +16,7 @@ router.get("/query/all", getEventsByQueryParams);
 router.get("/query/all/time", getElapsedTimeOfEventsWithQueryParams);
 router.get("/query/recent", getMostRecentEventByQueryParams);
 router.get("/query/status", getStatusOfTaskByQueryParams);
+
 router.post("/", addEvent);
 
 module.exports = router;

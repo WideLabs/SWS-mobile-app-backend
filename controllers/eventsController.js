@@ -74,17 +74,16 @@ const getEventsByQueryParams = async (req, res, next) => {
 // Params id_work_order, id_column_order, id_takt
 const getMostRecentEventByQueryParams = async (req, res, next) => {
   try {
-    const { id_work_order, id_column_order, id_takt } = req.query;
+    const { id_column_order, id_takt } = req.query;
 
     // Check if atleast on query param is provided
-    if (!id_work_order && !id_column_order && !id_takt)
+    if (!id_column_order && !id_takt)
       return res.status(httpStatusCodes.BAD_REQUEST).json({
         message:
           "Missing query parameters. Atleast one param must be provided.",
       });
 
     const result = await eventsDbService.getMostRecentEventWithParams({
-      id_work_order,
       id_column_order,
       id_takt,
     });
@@ -108,17 +107,16 @@ const getMostRecentEventByQueryParams = async (req, res, next) => {
 // Desc Calc elapsed time of results
 const getElapsedTimeOfEventsWithQueryParams = async (req, res, next) => {
   try {
-    const { id_column_order, id_takt } = req.query;
+    const { id_blind } = req.query;
 
-    if (!id_column_order || !id_takt) {
+    if (!id_blind) {
       return res
         .status(httpStatusCodes.BAD_REQUEST)
         .json({ message: "Missing query parameters. Both params required" });
     }
 
     const results = await eventsDbService.getAllEventsWithParams({
-      id_column_order,
-      id_takt,
+      id_blind,
     });
 
     if (results.length < 2) {
@@ -143,17 +141,18 @@ const getElapsedTimeOfEventsWithQueryParams = async (req, res, next) => {
 // Params id_column_order, id_takt
 const getStatusOfTaskByQueryParams = async (req, res, next) => {
   try {
-    const { id_column_order, id_takt } = req.query;
+    const { id_column_order, id_takt, piece_num } = req.query;
 
-    if (!id_column_order || !id_takt) {
+    if (!id_column_order || !id_takt || !piece_num) {
       return res
         .status(httpStatusCodes.BAD_REQUEST)
         .json({ message: "Missing query parameters. Both params required." });
     }
 
-    const result = await eventsDbService.getMostRecentEventWithParams({
+    const result = await eventsDbService.getRecentEvent({
       id_column_order,
       id_takt,
+      piece_num,
     });
 
     // No event for specified task found. Work hasnt started yet.
@@ -181,15 +180,26 @@ const getStatusOfTaskByQueryParams = async (req, res, next) => {
 // Desc Adds new event based on values provided in request body
 const addEvent = async (req, res, next) => {
   try {
-    const { id_work_order, id_column_order, id_takt, action, id_mobile_user } =
-      req.body;
+    const {
+      id_customer_order,
+      id_column_order,
+      id_takt,
+      action,
+      id_mobile_user,
+      order_no,
+      quantity,
+      id_blind,
+    } = req.body;
 
     if (
-      !id_work_order ||
       !id_column_order ||
       !id_takt ||
       !action ||
-      !id_mobile_user
+      !id_mobile_user ||
+      !id_customer_order ||
+      !order_no ||
+      !quantity ||
+      !id_blind
     ) {
       return res
         .status(httpStatusCodes.BAD_REQUEST)
@@ -204,14 +214,11 @@ const addEvent = async (req, res, next) => {
 
     const TIME_FORMATED = moment(Date.now()).format("YYYY-MM-DD HH:mm:ss");
 
-    const lastAddedEvent = await eventsDbService.getMostRecentEventWithParams({
-      id_column_order,
-      id_takt,
+    const lastAddedEvent = await eventsDbService.getRecentEvent({
+      id_blind,
     });
 
-    console.log("last event id", lastAddedEvent?.id_timed_event);
-    console.log("last event action", lastAddedEvent?.action);
-    console.log("last event time", lastAddedEvent?.time);
+    console.log("last event", lastAddedEvent);
 
     // No previous event for task. Start new task.
     if (!lastAddedEvent) {
@@ -222,13 +229,15 @@ const addEvent = async (req, res, next) => {
             "Bad request. Can't pause/finish task that has not started yet.",
         });
       }
+
       const newEventId = await eventsDbService.addNewEvent(
-        id_work_order,
+        id_customer_order,
         id_column_order,
         id_takt,
         id_mobile_user,
         TIME_FORMATED,
-        "START"
+        "START",
+        id_blind
       );
       return res.status(httpStatusCodes.OK).json({
         message: "New event added successfuly.",
@@ -257,12 +266,13 @@ const addEvent = async (req, res, next) => {
       // If current action is "pause" add new pause event.
       if (action.toLowerCase() === "pause") {
         const newEventId = await eventsDbService.addNewEvent(
-          id_work_order,
+          id_customer_order,
           id_column_order,
           id_takt,
           id_mobile_user,
           TIME_FORMATED,
-          "PAUSE"
+          "PAUSE",
+          id_blind
         );
         return res.status(httpStatusCodes.OK).json({
           message: "New event added successfuly.",
@@ -274,16 +284,19 @@ const addEvent = async (req, res, next) => {
       // If current action is "finish" add new finish event and calculate elapse time.
       // TODO ELAPSED TIME CALC UTIL
       const newEventId = await eventsDbService.addNewEvent(
-        id_work_order,
+        id_customer_order,
         id_column_order,
         id_takt,
         id_mobile_user,
         TIME_FORMATED,
-        "FINISH"
+        "FINISH",
+        id_blind
       );
+
+      /* await eventsDbService.finishColumnOrder({ id_column_order, id_takt }); */
+
       const correspondingEvents = await eventsDbService.getAllEventsWithParams({
-        id_column_order,
-        id_takt,
+        id_blind,
       });
       // Safeguard but with proper use this should never happen
       if (correspondingEvents.length < 2) {
@@ -319,12 +332,13 @@ const addEvent = async (req, res, next) => {
         });
       }
       const newEventId = await eventsDbService.addNewEvent(
-        id_work_order,
+        id_customer_order,
         id_column_order,
         id_takt,
         id_mobile_user,
         TIME_FORMATED,
-        "START"
+        "START",
+        id_blind
       );
       return res.status(httpStatusCodes.OK).json({
         message: "New event added successfuly.",

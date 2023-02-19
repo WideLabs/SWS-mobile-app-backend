@@ -70,13 +70,15 @@ const loginUser = async (req, res, next) => {
     }
 
     const existingUser = (await usersDbService.getUserByUsername(username))[0];
+
+    console.log(existingUser);
     if (!existingUser) {
       return res
         .status(httpStatusCodes.NOT_FOUND)
         .json({ message: "Login failed. User does not exist." });
     }
 
-    if (existingUser.pin !== pin) {
+    if (String(existingUser.pin) !== pin) {
       return res
         .status(httpStatusCodes.UNAUTHORIZED)
         .json({ message: "Login failed. Incorrect PIN." });
