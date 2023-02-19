@@ -4,7 +4,7 @@ exports.getAllUsers = async () => {
   const [rows, fields] = await connection
     .promise()
     .query(
-      "SELECT username AS value,name AS label,pin FROM mobile_user ORDER BY name ASC;"
+      "SELECT username AS key,name AS value FROM mobile_user ORDER BY name ASC;"
     );
   return rows;
 };
