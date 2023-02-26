@@ -176,6 +176,21 @@ const getStatusOfTaskByQueryParams = async (req, res, next) => {
   }
 };
 
+const getRecentUserEvent = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const blind = await eventsDbService.getUnifinishedUserBlinds({
+      id_mobile_user: id,
+    });
+
+    console.log(blind);
+    res.status(httpStatusCodes.OK).json(blind);
+  } catch (err) {
+    next(err);
+  }
+};
+
 // Route POST /events
 // Desc Adds new event based on values provided in request body
 const addEvent = async (req, res, next) => {
@@ -357,6 +372,7 @@ module.exports = {
   getEvents,
   getEventById,
   getEventsByQueryParams,
+  getRecentUserEvent,
   getMostRecentEventByQueryParams,
   getElapsedTimeOfEventsWithQueryParams,
   getStatusOfTaskByQueryParams,

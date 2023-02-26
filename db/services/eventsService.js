@@ -46,6 +46,28 @@ exports.getAllEventsWithParams = async (params) => {
   return rows[0];
 }; */
 
+exports.getUnifinishedUserBlinds = async (params) => {
+  const { id_mobile_user } = params;
+
+  const [rows, fields] = await connection
+    .promise()
+    .query(
+      `SELECT * FROM blind WHERE id_mobile_user = ? AND status = 'inProgress';`,
+      [id_mobile_user]
+    );
+
+  const [totalCount] = await connection
+    .promise()
+    .query(
+      `SELECT COUNT(*) AS count FROM blind WHERE id_mobile_user = ? AND status = 'inProgress';`,
+      [id_mobile_user]
+    );
+
+  const total = totalCount[0].count;
+
+  return { rows, total };
+};
+
 exports.getRecentEvent = async (params) => {
   const { id_blind } = params;
 
