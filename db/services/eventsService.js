@@ -16,7 +16,9 @@ exports.getEventById = async (id) => {
 
 exports.getAllEventsWithParams = async (params) => {
   const { id_blind } = params;
-  const [rows, fields] = await connection.promise().query();
+  const [rows, fields] = await connection
+    .promise()
+    .query(`SELECT * FROM timed_event WHERE id_blind = ? `, [id_blind]);
 
   return rows;
 };
