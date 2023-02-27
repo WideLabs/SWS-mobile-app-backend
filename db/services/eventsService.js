@@ -16,11 +16,22 @@ exports.getEventById = async (id) => {
 
 exports.getAllEventsWithParams = async (params) => {
   const { id_blind } = params;
-  const [rows, fields] = await connection
-    .promise()
-    .query(`SELECT * FROM timed_event WHERE id_blind = ? `, [id_blind]);
+  const [rows, fields] = await connection.promise().query();
 
   return rows;
+};
+
+exports.getStartTime = async (params) => {
+  const { id } = params;
+
+  const [rows, fields] = await connection
+    .promise()
+    .query(
+      `SELECT * FROM timed_event WHERE id_blind = ? ORDER BY id_timed_event DESC `,
+      [id]
+    );
+
+  return rows[0];
 };
 
 /* exports.getRecentEvent = async (params) => {
@@ -84,11 +95,11 @@ exports.getUnifinishedUserBlinds = async (params) => {
 };
 
 exports.getRecentEvent = async (params) => {
-  const { id_blind } = params;
+  const { id } = params;
 
   const query = `SELECT * FROM timed_event WHERE id_blind = ? ORDER BY id_timed_event DESC;`;
 
-  const [rows, fields] = await connection.promise().query(query, [id_blind]);
+  const [rows, fields] = await connection.promise().query(query, [id]);
 
   return rows[0];
 };

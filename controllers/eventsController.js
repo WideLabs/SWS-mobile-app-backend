@@ -176,16 +176,31 @@ const getStatusOfTaskByQueryParams = async (req, res, next) => {
   }
 };
 
+const getStatusOfBlind = async (req, res, next) => {
+  const { id } = req.params;
+
+  const result = await eventsDbService.getRecentEvent({ id });
+
+  const start = await eventsDbService.getStartTime({ id });
+
+  console.log(start);
+
+  console.log(result);
+
+  res.json({ lastAction: result.action, startTime: start.time });
+};
+
 const getRecentUserEvent = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    const blind = await eventsDbService.getUnifinishedUserBlinds({
+    const blinds = await eventsDbService.getUnifinishedUserBlinds({
       id_mobile_user: id,
     });
 
-    console.log(blind);
-    res.status(httpStatusCodes.OK).json(blind);
+    console.log(blinds);
+
+    res.status(httpStatusCodes.OK).json({ blinds: blinds });
   } catch (err) {
     next(err);
   }
@@ -377,4 +392,5 @@ module.exports = {
   getElapsedTimeOfEventsWithQueryParams,
   getStatusOfTaskByQueryParams,
   addEvent,
+  getStatusOfBlind,
 };
