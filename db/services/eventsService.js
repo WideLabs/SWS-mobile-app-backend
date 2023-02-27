@@ -63,6 +63,21 @@ exports.getUnifinishedUserBlinds = async (params) => {
       [id_mobile_user]
     );
 
+  for (let x = 0; x < rows.length; x++) {
+    console.log("a", x);
+    const [order] = await connection
+      .promise()
+      .query(`SELECT * FROM column_order WHERE id_column_order = ? ;`, [
+        rows[x].id_column_order,
+      ]);
+
+    rows[x].id_customer_order = order[0].id_customer_order;
+    rows[x].quantity = order[0].quantity;
+    rows[x].order_no = order[0].order_no;
+
+    console.log("order", order);
+  }
+
   const total = totalCount[0].count;
 
   return { rows, total };
