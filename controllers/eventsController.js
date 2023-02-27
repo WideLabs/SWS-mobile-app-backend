@@ -181,13 +181,17 @@ const getStatusOfBlind = async (req, res, next) => {
 
   const result = await eventsDbService.getRecentEvent({ id });
 
-  const start = await eventsDbService.getStartTime({ id });
+  if (!result) {
+    res.json({ lastAction: "none", startTime: null });
+  } else {
+    const start = await eventsDbService.getStartTime({ id });
 
-  console.log(start);
+    console.log(start);
 
-  console.log(result);
+    console.log(result);
 
-  res.json({ lastAction: result.action, startTime: start.time });
+    res.json({ lastAction: result.action, startTime: start.time });
+  }
 };
 
 const getRecentUserEvent = async (req, res, next) => {
